@@ -4,6 +4,8 @@
 #   feat -> ✨ 新增 ; fix/revert -> 🐛 修复 ; perf -> ⚡ 改进
 #   隐藏：ci/chore/docs/build/refactor/test/style 与 fix(ci)
 #   去掉 scope 前缀：feat(ui): 骨架屏 -> 骨架屏
+#   破坏性：subject 的 `!` 或 body footer `BREAKING CHANGE:` / `BREAKING-CHANGE:`（任一命中即加
+#   `【破坏性变更】`前缀，两者同时存在只加一次）—— 与 committing.md §Format 的承诺一致。
 # 两通道同源、全自动、无人工审核；结果同时供应用内弹窗 / version.json / GitHub Release 使用。
 set -Eeuo pipefail
 shopt -s inherit_errexit
@@ -46,8 +48,12 @@ for seg in segs:
         continue
     if typ not in sections:
         continue
+    # 破坏性标记：subject 的 `!` 或 body footer（Conventional Commits 1.0.0 允许
+    # `BREAKING CHANGE:` 与 `BREAKING-CHANGE:` 两种 token）。任一命中即加前缀，
+    # 与 `!` 的输出样式完全一致；两者同时出现只加一次。
+    footer = any(re.match(r"^BREAKING(?: |-)CHANGE:", l) for l in lines[1:])
     text = desc
-    if bang:
+    if bang or footer:
         text = "【破坏性变更】" + text
     sections[typ].append(text)
 

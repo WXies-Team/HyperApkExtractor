@@ -14,6 +14,31 @@ GIT_TAG=${4:-}
 
 fail() { echo "::error::$1" >&2; exit 1; }
 
+# 读取服务器上某通道 version.json 的 versionName。
+# 不能直连 https://storage.horatio.cn/<PROJECT>/<channel>/version.json —— 那是 OpenList/AList 的
+# SPA 路由，返回的是前端 HTML（HTTP 200 但非 JSON），解析失败会让 BUILD 永远回退到 1。
+# 正确做法（AList `POST /api/fs/get` 返回 `data.raw_url` 签名字段，见 OpenList 文档与
+# server/handles/fsread.go 的 FsGetResp.RawURL）：先取 raw_url，再读真正的 version.json。
+# 读不到（首版 / 网络失败 / 文件不存在）输出空串并返回 0，由调用方决定回退行为。
+fetch_version_name() { # $1=PROJECT $2=channel(beta|stable)
+  local project=$1 channel=$2 raw name
+  raw=$(curl -fsS --max-time 20 \
+    "https://storage.horatio.cn/api/fs/get?path=/$project/$channel/version.json" 2>/dev/null \
+    | python3 -c 'import sys,json
+try:
+ print(json.load(sys.stdin)["data"]["raw_url"])
+except Exception:
+ print("")' 2>/dev/null || true)
+  [ -n "$raw" ] || return 0
+  name=$(curl -fsS --max-time 20 "$raw" 2>/dev/null \
+    | python3 -c 'import sys,json
+try:
+ print(json.load(sys.stdin).get("versionName",""))
+except Exception:
+ print("")' 2>/dev/null || true)
+  printf '%s' "$name"
+}
+
 case "$CHANNEL" in
   beta|stable) ;;
   *) fail "CHANNEL 必须是 beta 或 stable，收到: $CHANNEL" ;;
@@ -28,33 +53,14 @@ else
   XYZ=$(tr -d '[:space:]' < "$VERSION_FILE")
   [[ "$XYZ" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "$VERSION_FILE 必须是 X.Y.Z，收到: $XYZ"
 
-  # beta 的 BUILD 真相源在服务器 beta/version.json。用 flock 包住「读→+1」临界区，
+  # beta 的 BUILD 真相源在服务器 beta/version.json（fetch_version_name 里有 SPA 陷阱说明）。
+  # 用 flock 包住「读→+1」临界区，
   # 防止同一 self-hosted runner 上并发 push 拿到相同 BUILD（workflow concurrency 之外的双保险）。
   LOCK_FILE="${TMPDIR:-/tmp}/${PROJECT}-beta-build.lock"
   exec 9>"$LOCK_FILE"
   flock -x 9
 
-  # 不能直连 https://storage.horatio.cn/<PROJECT>/beta/version.json —— 那是 OpenList/AList 的
-  # SPA 路由，返回的是前端 HTML（HTTP 200 但非 JSON），解析失败会让 BUILD 永远回退到 1。
-  # 正确做法（AList `POST /api/fs/get` 返回 `data.raw_url` 签名字段，见 OpenList 文档与
-  # server/handles/fsread.go 的 FsGetResp.RawURL）：先取 raw_url，再读真正的 version.json。
-  RAW_URL=$(curl -fsS --max-time 20 \
-    "https://storage.horatio.cn/api/fs/get?path=/$PROJECT/beta/version.json" 2>/dev/null \
-    | python3 -c 'import sys,json
-try:
- print(json.load(sys.stdin)["data"]["raw_url"])
-except Exception:
- print("")' 2>/dev/null || true)
-
-  CURRENT_NAME=""
-  if [ -n "$RAW_URL" ]; then
-    CURRENT_NAME=$(curl -fsS --max-time 20 "$RAW_URL" 2>/dev/null \
-      | python3 -c 'import sys,json
-try:
- print(json.load(sys.stdin).get("versionName",""))
-except Exception:
- print("")' 2>/dev/null || true)
-  fi
+  CURRENT_NAME=$(fetch_version_name "$PROJECT" beta)
 
   if [[ "$CURRENT_NAME" == "$XYZ."* ]]; then
     BUILD=${CURRENT_NAME##*.}
@@ -90,22 +96,7 @@ PY
   if [ "$CHANNEL" = "stable" ]; then
     # 稳定版的上一版也从服务器读（和 beta 同一套网络机制）——tag 只用来触发发版，
     # 不再参与版本/单调校验。首版（服务器无 stable version.json）读不到则跳过校验。
-    STABLE_RAW=$(curl -fsS --max-time 20 \
-      "https://storage.horatio.cn/api/fs/get?path=/$PROJECT/stable/version.json" 2>/dev/null \
-      | python3 -c 'import sys,json
-try:
- print(json.load(sys.stdin)["data"]["raw_url"])
-except Exception:
- print("")' 2>/dev/null || true)
-    PREV_STABLE=""
-    if [ -n "$STABLE_RAW" ]; then
-      PREV_STABLE=$(curl -fsS --max-time 20 "$STABLE_RAW" 2>/dev/null \
-        | python3 -c 'import sys,json
-try:
- print(json.load(sys.stdin).get("versionName",""))
-except Exception:
- print("")' 2>/dev/null || true)
-    fi
+    PREV_STABLE=$(fetch_version_name "$PROJECT" stable)
     if [ -n "$PREV_STABLE" ]; then
       OLD_CODE=$(python3 - "$PREV_STABLE" <<'PY'
 import sys
