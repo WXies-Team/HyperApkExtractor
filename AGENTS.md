@@ -18,7 +18,7 @@ No test suite; these are the only local checks. Local run needs Python 3.x + `ar
 
 ## Release model (self-built, two channels)
 
-Hand-controlled `VERSION` file (X.Y.Z) + auto BUILD on the server. Push `main` → beta `X.Y.Z.N` (BUILD 1–99, no GitHub Release); human-pushed tag `X.Y.Z.0` → stable (GitHub Release latest). versionCode = MAJOR×1e6 + MINOR×1e4 + PATCH×100 + BUILD (never GITHUB_RUN_NUMBER). `ci/determine-version.sh` computes the version and reads the previous release's commit from the server over the network (OpenList API); `ci/gen-changelog.sh` builds an incremental changelog from that commit (`git log <prev>..HEAD`, full history for the first release); `ci/pack-all.sh` packs 8 platforms; `ci/upload-openlist.sh` uploads artifacts + signed `version.json` (ECDSA P-256). The tag is ONLY a stable-build trigger — it never influences version or changelog. Changelog headings are Chinese with emoji (`✨ 新增` / `🐛 修复` / `⚡ 改进`). See `~/.config/opencode/docs/versioning.md` and `release-pipeline.md`.
+Push `main` → beta `X.Y.Z.N` (BUILD 1–99, signed `version.json`, no GitHub Release); human-pushed tag `X.Y.Z.0` → stable (GitHub Release latest). CI chain `ci/determine-version.sh` → `ci/gen-changelog.sh` → `ci/pack-all.sh` → `ci/upload-openlist.sh` computes the version, the incremental changelog (full history on first release), the 8-platform pack and the upload; the tag only triggers the stable build, never version or changelog. Rules: `~/.config/opencode/docs/versioning.md`; implementation: `release-pipeline.md`.
 
 ## Context loading
 
@@ -28,11 +28,12 @@ Hand-controlled `VERSION` file (X.Y.Z) + auto BUILD on the server. Push `main` �
 | Shared across the three Analysis tools | `~/.config/opencode/docs/sister-repos.md` |
 | CI / deploy behavior | `.github/workflows/release.yml`, `ci/pack-all.sh`, `ci/upload-openlist.sh` |
 | End-user usage | `README.md` |
+| Global rules | `~/.config/opencode/AGENTS.md` |
 
 ## Boundaries
 
 ### Always
-- Use the `docs:` prefix for doc-only commits (`paths-ignore` skips the release; changelog hides docs/chore/ci/test/style/build/refactor/revert).
+- Use the `docs:` prefix for doc-only commits (`paths-ignore` skips the release; hidden changelog types: `committing.md` §Types and changelog sections).
 - Keep `ci/pack-all.sh`'s platform table in sync with upstream asset names; `gh release download` patterns were verified against live assets.
 - Keep `ci/upload-openlist.sh` standalone: `bash -n` clean and free of hard-coded server paths (`OPENLIST_STORAGE_DIR` comes from secret `SERVER_OPENLIST_DIR`).
 
@@ -47,4 +48,6 @@ Hand-controlled `VERSION` file (X.Y.Z) + auto BUILD on the server. Push `main` �
 - Reintroduce semantic-release, `release.config.mjs`, marker commits, `release-notes.md`, or `ci/release-*.sh` scripts.
 - Treat the two channels as branches — there is no `beta` branch; channels are version states.
 
-General rules: `~/.config/opencode/AGENTS.md`.
+## Definition of done
+
+`bash -n ci/*.sh` clean and every `.github/workflows/*.yml` parses; `ci/determine-version.sh` / `ci/gen-changelog.sh` dry-runs print sane output; no `/www/` server paths in source; nothing from `output/`, `*.zip` or `__pycache__/` staged.
