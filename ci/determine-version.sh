@@ -19,23 +19,43 @@ fail() { echo "::error::$1" >&2; exit 1; }
 # SPA 路由，返回的是前端 HTML（HTTP 200 但非 JSON），解析失败会让 BUILD 永远回退到 1。
 # 正确做法（AList `POST /api/fs/get` 返回 `data.raw_url` 签名字段，见 OpenList 文档与
 # server/handles/fsread.go 的 FsGetResp.RawURL）：先取 raw_url，再读真正的 version.json。
-# 读不到（首版 / 网络失败 / 文件不存在）输出空串并返回 0，由调用方决定回退行为。
+# 读取失败 **fail closed**（带 3 次退避重试，2s/4s）：空值回退会让 BUILD 归 1、
+# 单调校验因 CURRENT_NAME 为空被跳过——发出低于线上的降级版本、changelog 退成全量
+# 历史（2026-11-25 发版预演实证的失败模式）。业界口径（MockServer release principles
+# 等）：发布脚本对不可得的必需状态 hard-fail，重试只给瞬时网络故障，绝不静默兜底。
+# 服务器尚无 version.json 的**首次发版**：AList SPA 行为下「不存在」与「网络失败」
+# 不可区分，显式设 FIRST_RELEASE=1 放行（此时 BUILD=1 才是正确行为）。
 fetch_version_name() { # $1=PROJECT $2=channel(beta|stable)
-  local project=$1 channel=$2 raw name
-  raw=$(curl -fsS --max-time 20 \
-    "https://storage.horatio.cn/api/fs/get?path=/$project/$channel/version.json" 2>/dev/null \
-    | python3 -c 'import sys,json
+  local project=$1 channel=$2 raw="" name="" attempt
+  for attempt in 1 2 3; do
+    raw=$(curl -fsS --max-time 20 \
+      "https://storage.horatio.cn/api/fs/get?path=/$project/$channel/version.json" 2>/dev/null \
+      | python3 -c 'import sys,json
 try:
  print(json.load(sys.stdin)["data"]["raw_url"])
 except Exception:
  print("")' 2>/dev/null || true)
-  [ -n "$raw" ] || return 0
-  name=$(curl -fsS --max-time 20 "$raw" 2>/dev/null \
-    | python3 -c 'import sys,json
+    if [ -n "$raw" ]; then break; fi
+    if [ "$attempt" -lt 3 ]; then sleep $((attempt * 2)); fi
+  done
+  if [ -z "$raw" ]; then
+    if [ "${FIRST_RELEASE:-0}" = "1" ]; then return 0; fi
+    fail "读取服务器 $channel/version.json 失败（已重试 3 次）：拒绝回退发布降级版本；若确是首次发版（服务器尚无该文件），显式设 FIRST_RELEASE=1 后重跑"
+  fi
+  for attempt in 1 2 3; do
+    name=$(curl -fsS --max-time 20 "$raw" 2>/dev/null \
+      | python3 -c 'import sys,json
 try:
  print(json.load(sys.stdin).get("versionName",""))
 except Exception:
  print("")' 2>/dev/null || true)
+    if [ -n "$name" ]; then break; fi
+    if [ "$attempt" -lt 3 ]; then sleep $((attempt * 2)); fi
+  done
+  if [ -z "$name" ]; then
+    if [ "${FIRST_RELEASE:-0}" = "1" ]; then return 0; fi
+    fail "读取 $channel versionName 失败（已重试 3 次）：拒绝回退发布降级版本"
+  fi
   printf '%s' "$name"
 }
 
