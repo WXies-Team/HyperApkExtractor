@@ -1,6 +1,6 @@
 # AGENTS.md — Analysis Tool For HyperOS
 
-Python CLI that downloads HyperOS ROMs, extracts images and version-tracks APKs into JSON sets, released with a **self-built pipeline**: push to `main` → beta (VERSION file X.Y.Z + server BUILD → four-segment `X.Y.Z.N`, no GitHub Release); human tag `X.Y.Z.0` → stable (GitHub Release latest). Two channels only (beta / stable; no alpha). No marker commits, no hand-written release notes.
+Python CLI that downloads HyperOS ROMs, extracts images and version-tracks APKs into JSON sets, released with a **self-built pipeline**: push to `main` → beta (VERSION file X.Y.Z + server BUILD → four-segment `X.Y.Z.N`, no GitHub Release); bumping `VERSION` on `main`（或人工 tag `X.Y.Z.0`）→ stable (GitHub Release latest). Two channels only (beta / stable; no alpha). No marker commits, no hand-written release notes.
 
 ## Commands
 
@@ -19,7 +19,7 @@ No product test suite; release.py 的纯函数有 unittest 覆盖，其余是本
 
 ## Release model (self-built, two channels)
 
-Push `main` → beta `X.Y.Z.N` (BUILD 1–99, signed `version.json`, no GitHub Release); human-pushed tag `X.Y.Z.0` → stable (GitHub Release latest). CI chain `python3 ci/release.py version` → `changelog` → `pack` → `upload` computes the version, the incremental changelog (full history on first release), the 8-platform pack and the upload; the tag only triggers the stable build, never version or changelog. Rules: `~/.config/opencode/docs/versioning.md`; implementation: `release-pipeline.md`.
+Push `main` → beta `X.Y.Z.N` (BUILD 1–99, signed `version.json`, no GitHub Release); bumping `VERSION` on `main`（或人工推 tag `X.Y.Z.0`）→ stable (GitHub Release latest). CI chain `python3 ci/release.py version` → `changelog` → `pack` → `upload` computes the version, the incremental changelog (full history on first release), the 8-platform pack and the upload; a `VERSION` bump on `main`（或推 tag）触发稳定版构建；changelog 基准仍是上一版的 commit，与 tag 无关。 Rules: `~/.config/opencode/docs/versioning.md`; implementation: `release-pipeline.md`.
 
 ## Context loading
 

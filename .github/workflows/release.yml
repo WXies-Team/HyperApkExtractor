@@ -14,7 +14,6 @@ on:
       - '*.md'
       - '**/*.md'
       - 'docs/**'
-      - 'VERSION'
       - 'ci/**'
       - '.github/**'
       - 'scripts/**'
@@ -41,16 +40,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Decide release kind (VERSION bump)
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: python3 ci/release.py decide --before "$BEFORE"
+
       - name: Determine channel and version
         run: |
           set -Eeuo pipefail
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             CHANNEL=stable; TAG="$GITHUB_REF_NAME"
+          elif [ "${IS_RELEASE:-0}" = "1" ]; then
+            CHANNEL=stable; TAG="$RELEASE_TAG"
           else
             CHANNEL=beta; TAG=""
           fi
           echo "channel=$CHANNEL tag=$TAG"
           python3 ci/release.py version --channel "$CHANNEL" --tag "$TAG"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
 
       # 干净源码副本供打包（release.py pack 从 ./repo 取源码）
       - name: Checkout source for packaging
@@ -76,8 +83,22 @@ jobs:
           ARTIFACT_DIR: output
         run: python3 ci/release.py upload --channel "$CHANNEL" --version "$VERSION_NAME" --version-code "$VERSION_CODE" --artifact-dir output
 
+      - name: Tag the release commit (auto stable only)
+        if: env.CHANNEL == 'stable' && !startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ env.VERSION_NAME }}
+        run: |
+          set -Eeuo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG_NAME" >/dev/null 2>&1; then
+            echo "tag $TAG_NAME 已存在，跳过"
+            exit 0
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$TAG_NAME" -f sha="$GITHUB_SHA"
+
       - name: Create GitHub Release (stable only)
-        if: startsWith(github.ref, 'refs/tags/')
+        if: env.CHANNEL == 'stable'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

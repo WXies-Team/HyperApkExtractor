@@ -214,6 +214,37 @@ class RemoteScriptArgsTest(unittest.TestCase):
         self.assertEqual(calls[0][-1], "bash -s -- a '' 'b c'")
 
 
+class DecideReleaseTest(unittest.TestCase):
+    def test_version_untouched_is_beta(self):
+        ok, reason = release.decide_release(False, "1.0.1", "", False, False)
+        self.assertFalse(ok)
+        self.assertIn("未变化", reason)
+
+    def test_version_bump_releases_next_patch(self):
+        ok, reason = release.decide_release(True, "1.0.1", "1.0.0.0", False, False)
+        self.assertTrue(ok)
+        self.assertEqual(reason, "1.0.1.0")
+
+    def test_skip_marker_wins(self):
+        ok, reason = release.decide_release(True, "1.0.1", "1.0.0.0", False, True)
+        self.assertFalse(ok)
+        self.assertIn("skip release", reason)
+
+    def test_existing_tag_blocks(self):
+        ok, _ = release.decide_release(True, "1.0.1", "1.0.0.0", True, False)
+        self.assertFalse(ok)
+
+    def test_not_above_current_stable_blocks(self):
+        ok, reason = release.decide_release(True, "1.0.0", "1.0.2.0", False, False)
+        self.assertFalse(ok)
+        self.assertIn("不高于", reason)
+
+    def test_same_version_blocks(self):
+        ok, reason = release.decide_release(True, "1.0.2", "1.0.2.0", False, False)
+        self.assertFalse(ok)
+        self.assertIn("已是", reason)
+
+
 class VersionPatternTest(unittest.TestCase):
     def test_four_segment_target_is_valid(self):
         for name in ("1.0.2.0", "1.0.2.9", "3.1.4", "1.0.0-rc.1"):

@@ -264,6 +264,64 @@ def version_code(name):
     return major * 1_000_000 + minor * 10_000 + patch * 100 + build
 
 
+def read_version_file(path):
+    if not os.path.isfile(path):
+        die(f"缺少 {path}（内容应为 X.Y.Z，如 1.0.0）")
+    return "".join(open(path, encoding="utf-8").read().split())
+
+
+def decide_release(changed, xyz, current_stable, tag_exists, skip_marker):
+    """VERSION 变更是否等于"现在发正式版"。纯函数，单测直测。"""
+    if skip_marker:
+        return False, "提交信息含 [skip release]"
+    if not changed:
+        return False, "VERSION 未变化"
+    if not re.fullmatch(r"\d+\.\d+\.\d+", xyz):
+        return False, f"VERSION 非法: {xyz}"
+    target = f"{xyz}.0"
+    if tag_exists:
+        return False, f"tag {target} 已存在"
+    if current_stable:
+        if current_stable == target:
+            return False, f"stable 已是 {target}"
+        if version_code(target) <= version_code(current_stable):
+            return False, f"{target} 不高于当前 stable {current_stable}"
+    return True, target
+
+
+def cmd_decide(args):
+    """push 到 main 时判断本次是不是"改 VERSION → 发正式版"。"""
+    if os.environ.get("GITHUB_REF", "").startswith("refs/tags/"):
+        print("tag push：通道由 ref 决定，decide 跳过")
+        write_env({"IS_RELEASE": "0", "RELEASE_TAG": ""})
+        return
+    xyz = read_version_file(args.version_file)
+    target_tag = f"{xyz}.0"
+    head = args.sha or "HEAD"
+    message = out(["git", "log", "-1", "--format=%B", head]).lower()
+    before = (args.before or "").strip()
+    changed = False
+    if before and before.strip("0"):
+        changed = subprocess.run(
+            ["git", "diff", "--quiet", f"{before}..{head}", "--", args.version_file],
+            capture_output=True,
+        ).returncode != 0
+    current = fetch_version_name("stable") if changed else ""
+    tag_exists = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", f"refs/tags/{target_tag}"], capture_output=True
+    ).returncode == 0
+    is_release, reason = decide_release(changed, xyz, current, tag_exists, "[skip release]" in message)
+    if args.dry_run:
+        print(f"changed={changed} current_stable={current or '<none>'} -> "
+              f"{'RELEASE ' + reason if is_release else 'beta: ' + reason}")
+        return
+    if is_release:
+        notice(f"VERSION {xyz} → 发布正式版 {reason}")
+    else:
+        notice(f"本次不发正式版：{reason}")
+    write_env({"IS_RELEASE": "1" if is_release else "0", "RELEASE_TAG": reason if is_release else ""})
+
+
 def cmd_version(args):
     channel = args.channel
     if channel not in ("beta", "stable"):
@@ -277,9 +335,7 @@ def cmd_version(args):
         name = args.tag
         current = ""
     else:
-        if not os.path.isfile(args.version_file):
-            die(f"缺少 {args.version_file}（内容应为 X.Y.Z，如 1.0.0）")
-        xyz = "".join(open(args.version_file, encoding="utf-8").read().split())
+        xyz = read_version_file(args.version_file)
         if not re.fullmatch(r"\d+\.\d+\.\d+", xyz):
             die(f"{args.version_file} 必须是 X.Y.Z，收到: {xyz}")
         lock_path = os.path.join(tempfile.gettempdir(), f"{PROJECT}-beta-build.lock")
@@ -894,6 +950,13 @@ def main(argv=None):
     p.add_argument("--version-file", default="VERSION")
     p.add_argument("--tag", default="")
     p.set_defaults(func=cmd_version)
+
+    p = sub.add_parser("decide", help="判断本次 push 是否发正式版（VERSION 变更）")
+    p.add_argument("--before", default="", help="push 前的 SHA（github.event.before）")
+    p.add_argument("--sha", default="", help="本次 SHA（默认 HEAD）")
+    p.add_argument("--version-file", default="VERSION")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_decide)
 
     p = sub.add_parser("changelog", help="生成 changelog.txt")
     p.add_argument("--prev-commit", default="")
