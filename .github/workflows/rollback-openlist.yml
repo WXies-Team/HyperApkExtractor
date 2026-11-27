@@ -61,14 +61,11 @@ jobs:
           SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
           SSH_PORT: ${{ vars.SSH_PORT || '22' }}
           OPENLIST_STORAGE_DIR: ${{ secrets.SERVER_OPENLIST_DIR }}
+          CHANNEL: ${{ inputs.channel }}
+          TARGET_VERSION: ${{ inputs.target_version }}
+          DROP_VERSION: ${{ inputs.drop_version }}
+          CONFIRM: ${{ inputs.confirm }}
           DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
           PURGE: ${{ inputs.purge && 'true' || 'false' }}
-        run: |
-          set -Eeuo pipefail
-          args=(--channel "${{ inputs.channel }}" --target-version "${{ inputs.target_version }}")
-          [ -n "${{ inputs.drop_version }}" ] && args+=(--drop-version "${{ inputs.drop_version }}")
-          [ -n "${{ inputs.confirm }}" ] && args+=(--confirm "${{ inputs.confirm }}")
-          [ "$DRY_RUN" = true ] && args+=(--dry-run)
-          [ "$PURGE" = true ] && args+=(--purge)
-          python3 ci/release.py rollback "${args[@]}"
+        run: python3 ci/release.py rollback
 
