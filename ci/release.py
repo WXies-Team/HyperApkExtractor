@@ -48,6 +48,8 @@ BREAKING_FOOTER = re.compile(r"^BREAKING(?: |-)CHANGE:")
 SKIP_TRAILER = re.compile(r"^\s*changelog\s*:\s*skip\s*$", re.IGNORECASE)
 SKIP_SUBJECT = re.compile(r"\[skip changelog\]", re.IGNORECASE)
 HEADER_LIMIT = 100
+# 版本目录名是四段 X.Y.Z.B（stable 恒为 .0），也允许三段与预发布后缀。
+VERSION_RE = re.compile(r"\d+\.\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?")
 
 # 六组：破坏性变更/安全双归属（既进置顶组，也保留原语义），其余单归属。
 GROUPS = [("feat", "新增"), ("fix", "修复"), ("perf", "改进"), ("revert", "回滚")]
@@ -718,11 +720,10 @@ def cmd_rollback(args):
         die(f"CHANNEL 必须是 beta 或 stable，收到: {channel}")
     if not target:
         die("TARGET_VERSION is required")
-    pattern = r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?"
-    if not re.fullmatch(pattern, target):
+    if not VERSION_RE.fullmatch(target):
         die(f"TARGET_VERSION 格式非法: {target}")
     if drop:
-        if not re.fullmatch(pattern, drop):
+        if not VERSION_RE.fullmatch(drop):
             die(f"DROP_VERSION 格式非法: {drop}")
         if drop == target:
             die("DROP_VERSION 不能等于 TARGET_VERSION")

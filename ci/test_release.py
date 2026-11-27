@@ -200,6 +200,16 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(len(art["sha256"]), 64)
 
 
+class VersionPatternTest(unittest.TestCase):
+    def test_four_segment_target_is_valid(self):
+        for name in ("1.0.2.0", "1.0.2.9", "3.1.4", "1.0.0-rc.1"):
+            self.assertIsNotNone(release.VERSION_RE.fullmatch(name), name)
+
+    def test_path_traversal_rejected(self):
+        for name in ("../1.0.2.0", "1.0.2.0/..", "1.0"):
+            self.assertIsNone(release.VERSION_RE.fullmatch(name), name)
+
+
 class VersionCodeTest(unittest.TestCase):
     def test_formula(self):
         self.assertEqual(release.version_code("1.0.2.0"), 1_000_200)
