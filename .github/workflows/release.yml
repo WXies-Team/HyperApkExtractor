@@ -58,6 +58,7 @@ jobs:
         with:
           path: repo
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Prepare (changelog + pack 8 platforms)
         env:

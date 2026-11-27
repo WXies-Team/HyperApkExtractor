@@ -33,12 +33,15 @@ jobs:
   Analysis:
     runs-on: self-hosted
     timeout-minutes: 20
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
+        persist-credentials: false
       # 自托管工作区跨任务保留，checkout 默认 git clean -ffdx 清理上次残留
 
     - name: Checkout latest stable release
@@ -171,9 +174,11 @@ jobs:
         DEVICENAME: ${{ github.event.inputs.devicename }}
         OSVERSION: ${{ github.event.inputs.osversion }}
         PUSHDB: ${{ github.event.inputs.push }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
         git config user.name "${GITHUB_ACTOR}"
+        git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
         python main.py -t 1 "$DEVICE_ARG"
         git add "$DEVICE_DIR/"
         if [ "$PUSHDB" = "是" ]; then
