@@ -217,7 +217,9 @@ class Remote:
         run(["ssh", *self.opts, self.target, "bash -c " + sh(command)])
 
     def run_script(self, script, args):
-        run(["ssh", *self.opts, self.target, "bash -s --", *[str(a) for a in args]], input=script, text=True)
+        # 远端命令是单条 shell 字符串：逐个 quote，空参数才能保留成 ''（否则位置参数错位）。
+        remote = "bash -s -- " + " ".join(shlex.quote(str(a)) for a in args)
+        run(["ssh", *self.opts, self.target, remote], input=script, text=True)
 
     def scp(self, source, dest):
         run(["scp", "-i", self.key, "-P", self.port, *self.opts[4:], source, f"{self.target}:{dest}"])

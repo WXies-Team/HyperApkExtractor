@@ -200,6 +200,18 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(len(art["sha256"]), 64)
 
 
+class RemoteScriptArgsTest(unittest.TestCase):
+    def test_empty_arg_survives_quoting(self):
+        calls = []
+        remote = release.Remote.__new__(release.Remote)
+        remote.opts = []
+        with unittest.mock.patch.object(release.Remote, "target", new_callable=unittest.mock.PropertyMock,
+                                        return_value="u@h"), \
+             unittest.mock.patch.object(release, "run", side_effect=lambda cmd, **kw: calls.append(cmd)):
+            remote.run_script("echo hi", ["a", "", "b c"])
+        self.assertEqual(calls[0][-1], "bash -s -- a '' 'b c'")
+
+
 class VersionPatternTest(unittest.TestCase):
     def test_four_segment_target_is_valid(self):
         for name in ("1.0.2.0", "1.0.2.9", "3.1.4", "1.0.0-rc.1"):
