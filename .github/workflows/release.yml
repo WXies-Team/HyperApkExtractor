@@ -7,10 +7,17 @@ on:
   push:
     branches: [main]
     tags: ['*.*.*.0']
-    # 纯文档改动不发版（README/docs 进 build.yml 门禁即可，不必产出新 beta）
+    # 只改文档 / 发版基础设施（VERSION、ci/、.github/、scripts/）不发 beta：
+    # GitHub 只在「本次推送的所有改动文件都命中 patterns」时跳过；夹带代码改动照常发版。
+    # tag 推送不受 paths-ignore 影响，stable 始终发布。
     paths-ignore:
-      - '**.md'
+      - '*.md'
+      - '**/*.md'
       - 'docs/**'
+      - 'VERSION'
+      - 'ci/**'
+      - '.github/**'
+      - 'scripts/**'
   workflow_dispatch:
 
 defaults:
