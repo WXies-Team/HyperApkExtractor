@@ -214,6 +214,27 @@ class RemoteScriptArgsTest(unittest.TestCase):
         self.assertEqual(calls[0][-1], "bash -s -- a '' 'b c'")
 
 
+class ControlTokenTest(unittest.TestCase):
+    def test_skip_tokens_are_stripped_from_copy(self):
+        self.assertEqual(release.clean_text("[skip release] 只看标题行"), "只看标题行")
+        self.assertEqual(release.clean_text("修复闪退 [skip ci]"), "修复闪退")
+        self.assertEqual(release.clean_text("[skip changelog] 内部改动"), "内部改动")
+
+    def test_normal_brackets_survive(self):
+        self.assertEqual(release.clean_text("支持 [实验] 功能"), "支持 [实验] 功能")
+
+
+class SkipMarkerTest(unittest.TestCase):
+    def test_trailer_in_body(self):
+        self.assertTrue(release.has_skip_release("chore: bump", "说明\n\nRelease: skip\n"))
+
+    def test_trailer_is_line_exact(self):
+        self.assertFalse(release.has_skip_release("chore: bump", "文档里写 Release: skip 的用法\n"))
+
+    def test_legacy_subject_marker(self):
+        self.assertTrue(release.has_skip_release("chore(release): 1.0.3 [skip release]", ""))
+
+
 class DecideReleaseTest(unittest.TestCase):
     def test_version_untouched_is_beta(self):
         ok, reason = release.decide_release(False, "1.0.1", "", False, False)

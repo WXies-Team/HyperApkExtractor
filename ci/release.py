@@ -270,6 +270,13 @@ def read_version_file(path):
     return "".join(open(path, encoding="utf-8").read().split())
 
 
+def has_skip_release(subject, body):
+    """`Release: skip` trailer（推荐）或标题里的 [skip release]（旧写法）。"""
+    if re.search(r"(?i)\[skip\s+release\]", subject):
+        return True
+    return any(re.fullmatch(r"(?i)\s*release\s*:\s*skip\s*", line) for line in body.splitlines())
+
+
 def decide_release(changed, xyz, current_stable, tag_exists, skip_marker):
     """VERSION 变更是否等于"现在发正式版"。纯函数，单测直测。"""
     if skip_marker:
@@ -298,8 +305,10 @@ def cmd_decide(args):
     xyz = read_version_file(args.version_file)
     target_tag = f"{xyz}.0"
     head = args.sha or "HEAD"
-    # 只看标题行：正文里引用 `[skip release]`（文档/说明）不能误判成跳过发布。
-    message = out(["git", "log", "-1", "--format=%s", head]).lower()
+    # trailer 精确匹配整行，正文里"提到"标记不会误判；标题里的旧写法仍然认。
+    subject = out(["git", "log", "-1", "--format=%s", head])
+    body = out(["git", "log", "-1", "--format=%b", head])
+    skip_marker = has_skip_release(subject, body)
     before = (args.before or "").strip()
     changed = False
     if before and before.strip("0"):
@@ -311,7 +320,7 @@ def cmd_decide(args):
     tag_exists = subprocess.run(
         ["git", "rev-parse", "-q", "--verify", f"refs/tags/{target_tag}"], capture_output=True
     ).returncode == 0
-    is_release, reason = decide_release(changed, xyz, current, tag_exists, "[skip release]" in message)
+    is_release, reason = decide_release(changed, xyz, current, tag_exists, skip_marker)
     if args.dry_run:
         print(f"changed={changed} current_stable={current or '<none>'} -> "
               f"{'RELEASE ' + reason if is_release else 'beta: ' + reason}")
@@ -375,8 +384,13 @@ def cmd_version(args):
 
 # ---------------------------------------------------------------- changelog
 
+CONTROL_TOKEN = re.compile(r"(?i)\[\s*(?:skip\s+(?:release|changelog|ci)|ci\s+skip)\s*\]")
+
+
 def clean_text(text):
+    """控制标记不进用户文案：[skip release] / [skip changelog] / [skip ci] 是给流水线看的。"""
     text = EMOJI.sub("", text)
+    text = CONTROL_TOKEN.sub("", text)
     return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
