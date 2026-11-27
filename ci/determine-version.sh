@@ -16,31 +16,41 @@ fail() { echo "::error::$1" >&2; exit 1; }
 
 # 读取服务器上某通道 version.json 的 versionName。
 # 不能直连 https://storage.horatio.cn/<PROJECT>/<channel>/version.json —— 那是 OpenList/AList 的
-# SPA 路由，返回的是前端 HTML（HTTP 200 但非 JSON），解析失败会让 BUILD 永远回退到 1。
+# SPA 路由，返回的是前端 HTML（HTTP 200 但非 JSON）。
 # 正确做法（AList `POST /api/fs/get` 返回 `data.raw_url` 签名字段，见 OpenList 文档与
 # server/handles/fsread.go 的 FsGetResp.RawURL）：先取 raw_url，再读真正的 version.json。
-# 读取失败 **fail closed**（带 3 次退避重试，2s/4s）：空值回退会让 BUILD 归 1、
-# 单调校验因 CURRENT_NAME 为空被跳过——发出低于线上的降级版本、changelog 退成全量
-# 历史（2026-11-25 发版预演实证的失败模式）。业界口径（MockServer release principles
-# 等）：发布脚本对不可得的必需状态 hard-fail，重试只给瞬时网络故障，绝不静默兜底。
-# 服务器尚无 version.json 的**首次发版**：AList SPA 行为下「不存在」与「网络失败」
-# 不可区分，显式设 FIRST_RELEASE=1 放行（此时 BUILD=1 才是正确行为）。
+# 三种结果必须分开处理：
+#   1. 文件存在 → 返回 versionName；
+#   2. 明确不存在（HTTP 仍 200，body 为 code=500 且 message 含 "object not found"）→ 返回空，
+#      调用方按「首次发版」处理（beta BUILD=1 / stable 跳过同通道单调校验）；
+#   3. 网络失败、非 JSON、其他错误 → 3 次退避（2s/4s）后 fail closed。
+# 把 3 当 2 会让 BUILD 归 1、单调校验被跳过，发出低于线上的降级版本（2026-11-25 预演实证）；
+# 把 2 当 3 则首次发版永远发不出去（2026-11-27 stable 首发实证）。
 fetch_version_name() { # $1=PROJECT $2=channel(beta|stable)
-  local project=$1 channel=$2 raw="" name="" attempt
+  local project=$1 channel=$2 body="" raw="" name="" attempt rc=1
   for attempt in 1 2 3; do
-    raw=$(curl -fsS --max-time 20 \
-      "https://storage.horatio.cn/api/fs/get?path=/$project/$channel/version.json" 2>/dev/null \
-      | python3 -c 'import sys,json
+    body=$(curl -fsS --max-time 20 \
+      "https://storage.horatio.cn/api/fs/get?path=/$project/$channel/version.json" 2>/dev/null || true)
+    raw=$(python3 -c 'import json, sys
 try:
- print(json.load(sys.stdin)["data"]["raw_url"])
+ doc = json.load(sys.stdin)
 except Exception:
- print("")' 2>/dev/null || true)
-    if [ -n "$raw" ]; then break; fi
+ sys.exit(1)
+if "object not found" in str(doc.get("message") or ""):
+ print("::missing::")
+elif doc.get("code") == 200 and isinstance(doc.get("data"), dict) and doc["data"].get("raw_url"):
+ print(doc["data"]["raw_url"])
+else:
+ sys.exit(1)' <<<"$body" 2>/dev/null) && rc=0 || rc=$?
+    if [ "$rc" -eq 0 ] && [ "$raw" = "::missing::" ]; then
+      echo "::notice::$project/$channel/version.json 不存在，按首次发版处理" >&2
+      return 0
+    fi
+    if [ "$rc" -eq 0 ]; then break; fi
     if [ "$attempt" -lt 3 ]; then sleep $((attempt * 2)); fi
   done
-  if [ -z "$raw" ]; then
-    if [ "${FIRST_RELEASE:-0}" = "1" ]; then return 0; fi
-    fail "读取服务器 $channel/version.json 失败（已重试 3 次）：拒绝回退发布降级版本；若确是首次发版（服务器尚无该文件），显式设 FIRST_RELEASE=1 后重跑"
+  if [ "$rc" -ne 0 ]; then
+    fail "读取服务器 $project/$channel/version.json 失败（已重试 3 次）：无法确认上一版时拒绝发版"
   fi
   for attempt in 1 2 3; do
     name=$(curl -fsS --max-time 20 "$raw" 2>/dev/null \
@@ -48,14 +58,11 @@ except Exception:
 try:
  print(json.load(sys.stdin).get("versionName",""))
 except Exception:
- print("")' 2>/dev/null || true)
+ print("")' 2>/dev/null) || name=""
     if [ -n "$name" ]; then break; fi
     if [ "$attempt" -lt 3 ]; then sleep $((attempt * 2)); fi
   done
-  if [ -z "$name" ]; then
-    if [ "${FIRST_RELEASE:-0}" = "1" ]; then return 0; fi
-    fail "读取 $channel versionName 失败（已重试 3 次）：拒绝回退发布降级版本"
-  fi
+  [ -n "$name" ] || fail "$project/$channel version.json 缺少 versionName（文件损坏或 raw_url 失效）"
   printf '%s' "$name"
 }
 
