@@ -39,6 +39,12 @@ PROJECT = "HyperApkExtractor"
 PRODUCT_CN = "HyperOS"
 STORAGE = "https://storage.horatio.cn"
 APK_NAME_SUFFIX = "android-arm64-v8a"
+# 平台词形是白名单：旧的 `-android-arm64-release` 之类不能静默混进清单。
+ALLOWED_PLATFORMS = {
+    "android-arm64-v8a", "android-x86_64",
+    "linux-arm64", "linux-x86_64", "linux-x86_64-wsl",
+    "darwin-arm64", "darwin-x86_64", "windows-x86_64",
+}
 TYPE_HEADER = "feat|fix|perf|refactor|docs|test|build|ci|chore|revert|style"
 
 EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]")
@@ -175,6 +181,29 @@ def fetch_version_json(channel):
                 die(f"{PROJECT}/{channel} version.json 缺少 versionName（文件损坏或 raw_url 失效）")
             time.sleep((attempt + 1) * 2)
     return None
+
+
+def fetch_manifest_at(channel, version):
+    """读某个版本目录已有的 version.json；读不到返回 {}（回填时用来沿用 commit/publishedAt）。"""
+    api = f"{STORAGE}/api/fs/get?path=" + urllib.parse.quote(
+        f"/{PROJECT}/{channel}/{version}/version.json", safe="/")
+    try:
+        doc = json.loads(http_get(api))
+        raw = (doc.get("data") or {}).get("raw_url")
+        return json.loads(http_get(raw)) if raw else {}
+    except Exception:
+        return {}
+
+
+def merge_identity(manifest, existing, explicit_commit=""):
+    """回填时不要污染 changelog 基准与发布时间：显式 commit > 服务器已有 > 本次构建 SHA。"""
+    if explicit_commit:
+        manifest["commit"] = explicit_commit
+    elif (existing or {}).get("commit"):
+        manifest["commit"] = existing["commit"]
+    if (existing or {}).get("publishedAt"):
+        manifest["publishedAt"] = existing["publishedAt"]
+    return manifest
 
 
 def fetch_version_name(channel):
@@ -531,8 +560,8 @@ def derive_platform(filename, version):
     if not filename.startswith(prefix) or not filename.endswith(".apk") and not filename.endswith(".zip"):
         die(f"产物名不符合 HyperApkExtractor-<version>-<platform>.<ext>: {filename}")
     tail = filename[len(prefix):].rsplit(".", 1)[0]
-    if not re.fullmatch(r"(android|linux|windows|darwin)-[a-z0-9_]+(-[a-z0-9]+)?", tail):
-        die(f"产物名尾部不是合法 platform: {filename}")
+    if tail not in ALLOWED_PLATFORMS:
+        die(f"产物名尾部不是合法 platform: {tail}（允许: {', '.join(sorted(ALLOWED_PLATFORMS))}）")
     return tail
 
 
@@ -612,6 +641,7 @@ def cmd_upload(args):
         notes = open("changelog.txt", encoding="utf-8").read() if os.path.isfile("changelog.txt") else ""
         manifest = build_manifest(artifacts, args.version, code, args.channel,
                                   notes, env("GITHUB_SHA", required=False))
+        merge_identity(manifest, fetch_manifest_at(args.channel, args.version), args.commit)
         tmp = os.path.join(runner_temp(), "version.json")
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
@@ -911,6 +941,7 @@ def main(argv=None):
     p.add_argument("--version-code", type=int, default=0, help="缺省时按版本号公式推导")
     p.add_argument("--artifact-dir", default=".")
     p.add_argument("--artifact-prefix", default=PROJECT)
+    p.add_argument("--commit", default="", help="覆盖 version.json 的 commit（回填时传 tag 的 commit）")
     p.set_defaults(func=cmd_upload)
 
     p = sub.add_parser("rollback", help="通道回滚")

@@ -1,21 +1,18 @@
 name: backfill-openlist
 
-# 把**已存在的 GitHub Release 产物**补传到 OpenList（历史版本回填 / 指针修复用）。
-# 常规发版走 build.yml 的 Deploy to OpenList，本 workflow 只处理「Release 早已存在、
-# 但 OpenList 上没有」或「需要重传」的情况——它不重新构建，只搬运。
+# 灾备/修复：把**已存在的 GitHub Release 产物**补传到 OpenList。
+# 常规发版走 release.yml（beta=push / stable=tag）；本 workflow 只处理
+# 「Release 早已存在、但 OpenList 缺失或损坏」与「需要重传」——不重新构建，只搬运。
 #
-# 用法：workflow_dispatch
-#   version   要回填的版本（= Release tag，如 2.1.0，必填）
-#   channel   通道（stable / beta，默认 stable）
-#   build_id  version.json 的 build_id；旧版本体系没有 Build ID 时填 0
-#
-# 幂等：重复执行会覆盖同名版本目录，归档清理按 1/2/3 策略照常执行。
-
+# 幂等：重复执行覆盖同名版本目录；归档保留（beta 2 / stable 3）照常执行；
+# version.json 的 commit / publishedAt 沿用服务器已有值，不污染 changelog 基准与发布时间。
+# 产物名必须符合当前规范（android-arm64-v8a 等 8 个平台词形）；改名前的旧产物
+# （如 -android-arm64-release.apk）会被 release.py 明确拒绝，需先在 Release 里重命名资产。
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: '要回填的版本（Release tag，如 2.1.0）'
+        description: '要回填的版本（= Release tag，如 1.0.2.0）'
         required: true
       channel:
         description: '通道'
@@ -23,13 +20,13 @@ on:
         default: 'stable'
         type: choice
         options: [stable, beta]
-      build_id:
-        description: 'version.json 的 build_id（旧版本体系填 0）'
-        required: false
-        default: '0'
 
 permissions:
   contents: read
+
+concurrency:
+  group: backfill-${{ github.workflow }}-${{ inputs.version }}
+  cancel-in-progress: false
 
 jobs:
   backfill:
@@ -48,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p output
-          gh release download "$VERSION" -R "$GITHUB_REPOSITORY" --dir output --pattern '*.zip'
+          gh release download "$VERSION" -R "$GITHUB_REPOSITORY" --dir output -p '*.apk' -p '*.zip'
           ls -la output/
           # 复用 Release 正文作为 OpenList 各级 README（与发版时逐字一致）
           gh release view "$VERSION" -R "$GITHUB_REPOSITORY" --json body --jq .body > release.md
@@ -63,6 +60,9 @@ jobs:
           OPENLIST_STORAGE_DIR: ${{ secrets.SERVER_OPENLIST_DIR }}
           CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ inputs.version }}
-          BUILD_ID: ${{ inputs.build_id }}
-          ARTIFACT_DIR: output
-        run: python3 ci/release.py upload --channel "$CHANNEL" --version "$VERSION" --artifact-dir output
+        run: |
+          set -Eeuo pipefail
+          args=(upload --channel "$CHANNEL" --version "$VERSION" --artifact-dir output)
+          commit=$(git rev-parse -q --verify "$VERSION^{commit}" || true)
+          [ -n "$commit" ] && args+=(--commit "$commit")
+          python3 ci/release.py "${args[@]}"
