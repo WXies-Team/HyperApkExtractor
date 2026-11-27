@@ -270,11 +270,12 @@ def read_version_file(path):
     return "".join(open(path, encoding="utf-8").read().split())
 
 
-def has_skip_release(subject, body):
-    """`Release: skip` trailer（推荐）或标题里的 [skip release]（旧写法）。"""
-    if re.search(r"(?i)\[skip\s+release\]", subject):
-        return True
-    return any(re.fullmatch(r"(?i)\s*release\s*:\s*skip\s*", line) for line in body.splitlines())
+SKIP_RELEASE = re.compile(r"(?i)\[skip\s+release\]")
+
+
+def has_skip_release(subject):
+    """标题里出现 [skip release] 就跳过本次正式版发布（正文不参与判定）。"""
+    return bool(SKIP_RELEASE.search(subject))
 
 
 def decide_release(changed, xyz, current_stable, tag_exists, skip_marker):
@@ -305,10 +306,8 @@ def cmd_decide(args):
     xyz = read_version_file(args.version_file)
     target_tag = f"{xyz}.0"
     head = args.sha or "HEAD"
-    # trailer 精确匹配整行，正文里"提到"标记不会误判；标题里的旧写法仍然认。
     subject = out(["git", "log", "-1", "--format=%s", head])
-    body = out(["git", "log", "-1", "--format=%b", head])
-    skip_marker = has_skip_release(subject, body)
+    skip_marker = has_skip_release(subject)
     before = (args.before or "").strip()
     changed = False
     if before and before.strip("0"):

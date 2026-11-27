@@ -225,14 +225,14 @@ class ControlTokenTest(unittest.TestCase):
 
 
 class SkipMarkerTest(unittest.TestCase):
-    def test_trailer_in_body(self):
-        self.assertTrue(release.has_skip_release("chore: bump", "说明\n\nRelease: skip\n"))
+    def test_subject_marker(self):
+        for subject in ("chore(release): 1.0.3 [skip release]", "[skip release] chore: bump",
+                        "chore: bump [Skip Release]"):
+            self.assertTrue(release.has_skip_release(subject), subject)
 
-    def test_trailer_is_line_exact(self):
-        self.assertFalse(release.has_skip_release("chore: bump", "文档里写 Release: skip 的用法\n"))
-
-    def test_legacy_subject_marker(self):
-        self.assertTrue(release.has_skip_release("chore(release): 1.0.3 [skip release]", ""))
+    def test_plain_subject_is_not_skipped(self):
+        for subject in ("chore: bump", "docs: 更新说明"):
+            self.assertFalse(release.has_skip_release(subject), subject)
 
 
 class DecideReleaseTest(unittest.TestCase):
