@@ -281,7 +281,7 @@ def has_skip_release(subject):
 def decide_release(changed, xyz, current_stable, tag_exists, skip_marker):
     """VERSION 变更是否等于"现在发正式版"。纯函数，单测直测。"""
     if skip_marker:
-        return False, "提交信息含 [skip release]"
+        return False, "提交标题含 [skip release]"
     if not changed:
         return False, "VERSION 未变化"
     if not re.fullmatch(r"\d+\.\d+\.\d+", xyz):

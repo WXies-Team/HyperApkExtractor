@@ -249,7 +249,7 @@ class DecideReleaseTest(unittest.TestCase):
     def test_skip_marker_wins(self):
         ok, reason = release.decide_release(True, "1.0.1", "1.0.0.0", False, True)
         self.assertFalse(ok)
-        self.assertIn("skip release", reason)
+        self.assertIn("[skip release]", reason)
 
     def test_existing_tag_blocks(self):
         ok, _ = release.decide_release(True, "1.0.1", "1.0.0.0", True, False)
