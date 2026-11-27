@@ -6,8 +6,8 @@ name: backfill-openlist
 #
 # 幂等：重复执行覆盖同名版本目录；归档保留（beta 2 / stable 3）照常执行；
 # version.json 的 commit / publishedAt 沿用服务器已有值，不污染 changelog 基准与发布时间。
-# 产物名必须符合当前规范（android-arm64-v8a 等 8 个平台词形）；改名前的旧产物
-# （如 -android-arm64-release.apk）会被 release.py 明确拒绝，需先在 Release 里重命名资产。
+# 产物名必须符合当前规范（8 个平台词形，见 naming-conventions.md）；改名前的旧产物名
+# （带 `-release` 构建类型后缀）会被 release.py 明确拒绝，需先在 Release 里重命名资产。
 on:
   workflow_dispatch:
     inputs:

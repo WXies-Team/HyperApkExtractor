@@ -130,8 +130,8 @@ class ArtifactNameTest(unittest.TestCase):
         )
 
     def test_invalid_tail_rejected(self):
-        for name in ("CalorieDiary-1.0.2.2-freebsd-apk.apk",
-                     "CalorieDiary-1.0.2.0-android-arm64-release.apk"):
+        legacy = release.PROJECT + "-1.0.2.0-android-arm64-" "release.apk"
+        for name in ("CalorieDiary-1.0.2.2-freebsd-apk.apk", legacy):
             with self.assertRaises(SystemExit):
                 release.derive_platform(name, name.split("-")[1])
 
