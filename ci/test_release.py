@@ -214,25 +214,6 @@ class RemoteScriptArgsTest(unittest.TestCase):
         self.assertEqual(calls[0][-1], "bash -s -- a '' 'b c'")
 
 
-class MergeIdentityTest(unittest.TestCase):
-    def test_backfill_keeps_original_commit_and_published_at(self):
-        manifest = {"commit": "newsha", "publishedAt": "2026-11-27T00:00:00Z"}
-        release.merge_identity(manifest, {"commit": "oldsha", "publishedAt": "2026-10-01T00:00:00Z"})
-        self.assertEqual(manifest["commit"], "oldsha")
-        self.assertEqual(manifest["publishedAt"], "2026-10-01T00:00:00Z")
-
-    def test_explicit_commit_wins(self):
-        manifest = {"commit": "newsha"}
-        release.merge_identity(manifest, {"commit": "oldsha"}, explicit_commit="tagsha")
-        self.assertEqual(manifest["commit"], "tagsha")
-
-    def test_first_upload_keeps_build_sha(self):
-        manifest = {"commit": "buildsha", "publishedAt": "now"}
-        release.merge_identity(manifest, {})
-        self.assertEqual(manifest["commit"], "buildsha")
-        self.assertEqual(manifest["publishedAt"], "now")
-
-
 class VersionPatternTest(unittest.TestCase):
     def test_four_segment_target_is_valid(self):
         for name in ("1.0.2.0", "1.0.2.9", "3.1.4", "1.0.0-rc.1"):

@@ -183,29 +183,6 @@ def fetch_version_json(channel):
     return None
 
 
-def fetch_manifest_at(channel, version):
-    """读某个版本目录已有的 version.json；读不到返回 {}（回填时用来沿用 commit/publishedAt）。"""
-    api = f"{STORAGE}/api/fs/get?path=" + urllib.parse.quote(
-        f"/{PROJECT}/{channel}/{version}/version.json", safe="/")
-    try:
-        doc = json.loads(http_get(api))
-        raw = (doc.get("data") or {}).get("raw_url")
-        return json.loads(http_get(raw)) if raw else {}
-    except Exception:
-        return {}
-
-
-def merge_identity(manifest, existing, explicit_commit=""):
-    """回填时不要污染 changelog 基准与发布时间：显式 commit > 服务器已有 > 本次构建 SHA。"""
-    if explicit_commit:
-        manifest["commit"] = explicit_commit
-    elif (existing or {}).get("commit"):
-        manifest["commit"] = existing["commit"]
-    if (existing or {}).get("publishedAt"):
-        manifest["publishedAt"] = existing["publishedAt"]
-    return manifest
-
-
 def fetch_version_name(channel):
     doc = fetch_version_json(channel)
     return doc["versionName"] if doc else ""
@@ -641,7 +618,6 @@ def cmd_upload(args):
         notes = open("changelog.txt", encoding="utf-8").read() if os.path.isfile("changelog.txt") else ""
         manifest = build_manifest(artifacts, args.version, code, args.channel,
                                   notes, env("GITHUB_SHA", required=False))
-        merge_identity(manifest, fetch_manifest_at(args.channel, args.version), args.commit)
         tmp = os.path.join(runner_temp(), "version.json")
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
@@ -941,7 +917,6 @@ def main(argv=None):
     p.add_argument("--version-code", type=int, default=0, help="缺省时按版本号公式推导")
     p.add_argument("--artifact-dir", default=".")
     p.add_argument("--artifact-prefix", default=PROJECT)
-    p.add_argument("--commit", default="", help="覆盖 version.json 的 commit（回填时传 tag 的 commit）")
     p.set_defaults(func=cmd_upload)
 
     p = sub.add_parser("rollback", help="通道回滚")
