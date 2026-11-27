@@ -298,7 +298,8 @@ def cmd_decide(args):
     xyz = read_version_file(args.version_file)
     target_tag = f"{xyz}.0"
     head = args.sha or "HEAD"
-    message = out(["git", "log", "-1", "--format=%B", head]).lower()
+    # 只看标题行：正文里引用 `[skip release]`（文档/说明）不能误判成跳过发布。
+    message = out(["git", "log", "-1", "--format=%s", head]).lower()
     before = (args.before or "").strip()
     changed = False
     if before and before.strip("0"):
