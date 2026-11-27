@@ -1,7 +1,7 @@
 name: rollback-openlist
 
 # 撤回已发布版本：把 OpenList 通道指针重新指向一个已存在的不可变版本目录。
-# 具体逻辑全部在 ci/rollback-openlist.sh（registry.yaml 分发）；本 workflow 只做输入与 secrets 传递。
+# 具体逻辑在 ci/release.py rollback（registry.yaml 分发）；本 workflow 只做输入与 secrets 传递。
 # 回滚不重新构建、不覆盖产物；切换后做 HTTP 验证，失败自动恢复；删除默认仅归档。
 on:
   workflow_dispatch:
@@ -61,10 +61,14 @@ jobs:
           SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
           SSH_PORT: ${{ vars.SSH_PORT || '22' }}
           OPENLIST_STORAGE_DIR: ${{ secrets.SERVER_OPENLIST_DIR }}
-          CHANNEL: ${{ inputs.channel }}
-          TARGET_VERSION: ${{ inputs.target_version }}
-          DROP_VERSION: ${{ inputs.drop_version }}
-          DRY_RUN: ${{ inputs.dry_run }}
-          PURGE: ${{ inputs.purge }}
-          CONFIRM: ${{ inputs.confirm }}
-        run: bash ci/rollback-openlist.sh
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          PURGE: ${{ inputs.purge && 'true' || 'false' }}
+        run: |
+          set -Eeuo pipefail
+          args=(--channel "${{ inputs.channel }}" --target-version "${{ inputs.target_version }}")
+          [ -n "${{ inputs.drop_version }}" ] && args+=(--drop-version "${{ inputs.drop_version }}")
+          [ -n "${{ inputs.confirm }}" ] && args+=(--confirm "${{ inputs.confirm }}")
+          [ "$DRY_RUN" = true ] && args+=(--dry-run)
+          [ "$PURGE" = true ] && args+=(--purge)
+          python3 ci/release.py rollback "${args[@]}"
+

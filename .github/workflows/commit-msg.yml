@@ -1,0 +1,27 @@
+name: commit-msg
+
+# 标题门禁：只校验本次推送的最新一条（等价 commitlint --last）。
+# 独立于 build/release，红了不阻塞发版；本地 .githooks/commit-msg 才是第一道闸。
+# git 自动生成的 `Revert "..."` / `Merge ...` 与 Changelog: skip 一律豁免。
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check commit subject
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: python3 ci/release.py check-msg --message "$COMMIT_MESSAGE" --strict

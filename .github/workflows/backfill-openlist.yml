@@ -65,4 +65,4 @@ jobs:
           VERSION: ${{ inputs.version }}
           BUILD_ID: ${{ inputs.build_id }}
           ARTIFACT_DIR: output
-        run: bash ci/upload-openlist.sh
+        run: python3 ci/release.py upload --channel "$CHANNEL" --version "$VERSION" --artifact-dir output

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# 本地提交门禁：不合规标题当场拦下（CI 的 commit-msg.yml 只复核最新一条）。
+# 启用一次：git config core.hooksPath .githooks
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+exec python3 ci/release.py check-msg --file "$1" --strict

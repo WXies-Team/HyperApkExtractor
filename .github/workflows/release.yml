@@ -50,9 +50,9 @@ jobs:
             CHANNEL=beta; TAG=""
           fi
           echo "channel=$CHANNEL tag=$TAG"
-          bash ci/determine-version.sh "$CHANNEL" 'HyperApkExtractor' VERSION "$TAG"
+          python3 ci/release.py version --channel "$CHANNEL" --tag "$TAG"
 
-      # 干净源码副本供打包（pack-all.sh 从 ./repo 取源码）
+      # 干净源码副本供打包（release.py pack 从 ./repo 取源码）
       - name: Checkout source for packaging
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,7 +63,7 @@ jobs:
       - name: Prepare (changelog + pack 8 platforms)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash ci/prepare-release.sh 'HyperApkExtractor' "$CHANNEL" "$VERSION_NAME" "$VERSION_CODE"
+        run: python3 ci/release.py prepare --kind tool --channel "$CHANNEL" --version "$VERSION_NAME" --version-code "$VERSION_CODE"
 
       - name: Upload to OpenList (signed version.json)
         env:
@@ -74,7 +74,7 @@ jobs:
           OPENLIST_STORAGE_DIR: ${{ secrets.SERVER_OPENLIST_DIR }}
           UPDATER_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
           ARTIFACT_DIR: output
-        run: bash ci/upload-openlist.sh
+        run: python3 ci/release.py upload --channel "$CHANNEL" --version "$VERSION_NAME" --version-code "$VERSION_CODE" --artifact-dir output
 
       - name: Create GitHub Release (stable only)
         if: startsWith(github.ref, 'refs/tags/')
