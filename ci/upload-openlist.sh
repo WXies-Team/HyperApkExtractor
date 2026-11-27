@@ -50,7 +50,7 @@ if [ -f release.md ]; then
   run_scp release.md "$SERVER_USER@$SERVER_HOST:$TARGET_DIR/README.md"
 fi
 
-# version.json：每个 zip 一条 artifact，platform 为 Wails 风格 os-arch（小写）
+# version.json：每个 zip 一条 artifact，platform 即文件名尾部 os-arch[-variant]（Android 用 NDK ABI 词形）
 echo "== [OpenList] 生成并签名 version.json =="
 [ -s changelog.txt ] || { echo "::error::missing/empty changelog.txt"; exit 1; }
 NOTES_JSON=$(python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' < changelog.txt)
@@ -65,7 +65,7 @@ out, adir, prefix, version, code, channel, notes, commit_sha = sys.argv[1:9]
 BASE = "https://storage.horatio.cn/HyperApkExtractor"
 # 平台目录名 -> Wails 风格 os-arch
 PLAT = {
-    # 平台名已是规范 os-arch（小写 + x86_64/arm64），直接作为 platform；未知值兜底小写
+    # 平台名已是规范 os-arch[-variant]（Android 用 arm64-v8a 等 ABI 词形），直接作为 platform；未知值兜底小写
 }
 arts = []
 needle = prefix + "-" + version + "-"
@@ -81,7 +81,7 @@ for fn in sorted(f for f in os.listdir(adir) if f.startswith(needle) and f.endsw
 if not arts:
     raise SystemExit("no artifact found")
 doc = {
-    "schemaVersion": 1, "versionName": version, "versionCode": int(code),
+    "schemaVersion": 2, "versionName": version, "versionCode": int(code),
     "channel": channel, "publishedAt": os.popen("date -u +%Y-%m-%dT%H:%M:%SZ").read().strip(),
     # 构建该版本的 commit（npm provenance 的 Source Commit 同类做法），
     # 下次发版读它当 git log <prev>..HEAD 的增量基准；客户端验签忽略此未知字段。

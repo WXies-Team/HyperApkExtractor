@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 由 Conventional Commits 自动生成用户向 changelog（纯文本分组）。
 # 规则（对齐 Keep a Changelog + Conventional Commits 最佳实践）：
-#   feat -> ✨ 新增 ; fix/revert -> 🐛 修复 ; perf -> ⚡ 改进
+#   feat -> 新增 ; fix/revert -> 修复 ; perf -> 改进（零 emoji：changelog/storage/应用内同源）
 #   隐藏：ci/chore/docs/build/refactor/test/style 与 fix(ci)
 #   去掉 scope 前缀：feat(ui): 骨架屏 -> 骨架屏
 #   破坏性：subject 的 `!` 或 body footer `BREAKING CHANGE:` / `BREAKING-CHANGE:`（任一命中即加
@@ -55,9 +55,14 @@ for seg in segs:
     text = desc
     if bang or footer:
         text = "【破坏性变更】" + text
+    # emoji 一律不进 changelog：提交信息自带也不放过（storage 页面与应用内弹窗同源）。
+    text = re.sub("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]", "", text)
+    text = re.sub(r"[ \t]{2,}", " ", text).strip()
+    if not text:
+        continue
     sections[typ].append(text)
 
-order = [("feat","✨ 新增"),("fix","🐛 修复"),("perf","⚡ 改进")]
+order = [("feat","新增"),("fix","修复"),("perf","改进")]
 out = []
 for key, label in order:
     if sections[key]:

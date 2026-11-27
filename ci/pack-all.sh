@@ -20,9 +20,9 @@ PLATFORMS=(
   "linux-arm64|payload-dumper-go_*_linux_arm64.tar.gz|payload-dumper-go|erofs-tools-*Linux_aarch64*.zip||extract.erofs"
   "darwin-x86_64|payload-dumper-go_*_darwin_amd64.tar.gz|payload-dumper-go|erofs-utils-*Darwin_x86_64*.zip|v1.8.10-251217|extract.erofs"
   "darwin-arm64|payload-dumper-go_*_darwin_arm64.tar.gz|payload-dumper-go|erofs-utils-*Darwin_aarch64*.zip|v1.8.10-251217|extract.erofs"
-  "android-arm64|payload-dumper-go_*_linux_arm64.tar.gz|payload-dumper-go|erofs-tools-*Android_arm64*.zip||extract.erofs"
+  "android-arm64-v8a|payload-dumper-go_*_linux_arm64.tar.gz|payload-dumper-go|erofs-tools-*Android_arm64*.zip||extract.erofs"
   "android-x86_64|payload-dumper-go_*_linux_amd64.tar.gz|payload-dumper-go|erofs-tools-*Android_x86_64*.zip||extract.erofs"
-  "wsl-x86_64|payload-dumper-go_*_linux_amd64.tar.gz|payload-dumper-go|erofs-tools-*WSL_x86_64*.zip||extract.erofs"
+  "linux-x86_64-wsl|payload-dumper-go_*_linux_amd64.tar.gz|payload-dumper-go|erofs-tools-*WSL_x86_64*.zip||extract.erofs"
 )
 
 pack_one() {
